@@ -1,2 +1,2 @@
-# blockvine
-A fully integrated Git system for TurboWarp projects.
+# 🌱 BlockVine
+A fully integrated Git system for TurboWarp projects. Currently WIP.
