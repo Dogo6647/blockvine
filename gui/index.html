@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>BlockVine GUI</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="/gui/assets/style.css" rel="stylesheet" />
+</head>
+<body>
+	<h1>{{ projectName }}</h1>
+	<p>{{ projectDir }}</p> | <a href="/modal/folderpicker">Open another...</a><br><br>
+	<select id="branch">
+		{{ branches }}
+	</select>
+	<div id="rc-pane" class="pane">
+		<small>Untracked Changes</small>
+		<br>
+		<ul>
+			{{ untracked }}
+		</ul>
+	</div>
+	<div id="commit-pane" class="pane">
+		<small>Commit Options</small>
+		<br>
+		<textarea placeholder="Commit message"></textarea>
+		<button title="Register your saved changes in your local repo">✓ Commit changes</button>
+	</div>
+	<div id="rem-pane" class="pane">
+		<small>Remote</small>
+		<br>
+		<button title="Upload your changes (e.g. to a GitHub repo)">🠕 Push to origin</button>
+		<button title="Download the latest changes to the code">🠗 Pull from origin</button>
+	</div>
+	<button title="(Advanced) use the system terminal to perform actions on your local repo">$ Open shell</button>
+</body>
+</html>
