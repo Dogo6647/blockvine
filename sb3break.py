@@ -19,7 +19,10 @@ def organize_sb3(sb3_path):
         return
 
     home = Path.home()
-    out_dir = home / "BlockVine" / sb3_path.stem
+    if len(sys.argv) >= 2:
+        out_dir = Path(sys.argv[2])
+    else:
+        out_dir = home / "BlockVine" / sb3_path.stem
     assets_dir = out_dir / "assets"
 
     print(f"[ 🗜️ ] Extracting {sb3_path.name} to {out_dir}...")
