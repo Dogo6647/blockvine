@@ -8,15 +8,20 @@
 </head>
 <body>
 	<h1>{{ projectName }}</h1>
-	<p>{{ projectDir }}</p> | <a href="/modal/folderpicker">Open another...</a><br><br>
+	{{ projectDir }} | <a href="/modal/folderpicker">Open another...</a><br><br>
 	<select id="branch">
-		{{ branches }}
+	{% for branch in branches %}
+		<option>{{ branch }}</option>
+	{% endfor %}
+	<option>Add/remove branches...</option>
 	</select>
 	<div id="rc-pane" class="pane">
-		<small>Untracked Changes</small>
+		<small>Unstaged Changes</small>
 		<br>
 		<ul>
-			{{ untracked }}
+			{% for change in unstaged %}
+			<label><input type="checkbox" value="{{ change }}">{{ change }}</label><br>
+			{% endfor %}
 		</ul>
 	</div>
 	<div id="commit-pane" class="pane">
@@ -31,6 +36,13 @@
 		<button title="Upload your changes (e.g. to a GitHub repo)">🠕 Push to origin</button>
 		<button title="Download the latest changes to the code">🠗 Pull from origin</button>
 	</div>
-	<button title="(Advanced) use the system terminal to perform actions on your local repo">$ Open shell</button>
+	<button title="(Advanced) use the system terminal to perform actions on your local repo" onclick="openshell();">$ Open shell</button>
+
+	<script>
+		function openshell() {
+			fetch('/cmd/openShell', { method: 'POST' })
+				.then(r => r.status !== 200 && r.text().then(alert));
+		};
+	</script>
 </body>
 </html>
