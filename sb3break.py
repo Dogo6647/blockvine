@@ -21,7 +21,7 @@ def organize_sb3(sb3_path):
         return
 
     home = Path.home()
-    if len(sys.argv) >= 2:
+    if len(sys.argv) >= 3 and not sys.argv[2].startswith("--"):
         out_dir = Path(sys.argv[2])
     else:
         out_dir = home / "BlockVine" / sb3_path.stem
@@ -96,8 +96,47 @@ def organize_sb3(sb3_path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python sb3break.py </path/to/sb3>")
+        print("Usage: python sb3break.py </path/to/sb3> [output_dir] [--git]")
         sys.exit(1)
 
     sb3_file = sys.argv[1]
+    use_git = "--git" in sys.argv
+
     organize_sb3(sb3_file)
+
+    if len(sys.argv) >= 3 and not sys.argv[2].startswith("--"):
+        out_dir = Path(sys.argv[2]).expanduser().resolve()
+    else:
+        out_dir = Path.home() / "BlockVine" / Path(sb3_file).stem
+
+    if use_git and not (out_dir / ".git").exists():
+        import subprocess
+        try:
+            print("[ +🌱 ] Init Git...")
+            subprocess.run(["git", "init", "-b", "main"], cwd=out_dir, check=True, stdout=subprocess.PIPE)
+            gitignore_content = """# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# Editor junk
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# BlockVine cache
+_bvcache/
+"""
+            gitignore_path = out_dir / ".gitignore"
+            gitignore_path.write_text(gitignore_content, encoding="utf-8")
+
+            subprocess.run(["git", "add", "."], cwd=out_dir, check=True)
+            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=out_dir, check=True)
+
+            print("[ +😁 ] Git repo initialized. Default branch is {main}.")
+        except subprocess.CalledProcessError as e:
+            print(f"[ +⚠️ ] Git init failed: {e}")
