@@ -7,12 +7,16 @@
 	<link href="/gui/assets/style.css" rel="stylesheet" />
 </head>
 <body>
-	<h1><a href="javascript:void(0);">&lt;</a> Select a project</h1>
+	<h1><a href="/gui">&lt;</a> Select a project</h1>
 	{% for project in projects %}
     <form action="/cmd/openProject" method="POST">
         <input type="hidden" name="path" value="{{ project.path }}">
         <button class="modalEntry" type="submit"><span style="font-size: 32px;">🗀 {{ project.name }}</span><br>{{ project.path }}</button>
     </form>
     {% endfor %}
+    <form action="/cmd/openProject" method="POST">
+		<input type="hidden" name="path" value="none">
+		<button type="submit">Close project</button>
+    </form>
 </body>
 </html>

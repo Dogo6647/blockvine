@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title></title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="/gui/assets/style.css" rel="stylesheet" />
+</head>
+<body>
+	<h1><a href="/gui">&lt;</a> Convert an SB3 to a BlockVine project folder</h1>
+	<spinner></spinner> Open your file manager and drop an SB3 project into <code> / home / {{ sys_username }}/ BlockVine / </code> to begin.
+	<script>
+		let intervalId = setInterval(checkConv, 1000);
+
+		function checkConv() {
+		  fetch('/cmd/checkConv')
+		    .then(response => {
+		      if (response.status === 204) return;
+		      return response.json();
+		    })
+		    .then(data => {
+		      if (data && data.redirect) {
+		        clearInterval(intervalId);
+		        window.location.href = data.redirect;
+		      }
+		    })
+		    .catch(err => console.error('Could not check for SB3:', err));
+		}
+	</script>
+</body>
+</html>
