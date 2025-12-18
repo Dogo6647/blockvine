@@ -9,7 +9,21 @@
 <body>
 	<h1>{{ projectName }}</h1>
 	{{ projectDir }} | <a href="/modal/folderpicker">Open another...</a><br><br>
-	<select id="branch">
+	<script>
+		function switchBranch(branch) {
+			if (branch.includes("Add/remove")) return;
+
+			fetch('/cmd/checkout', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ branch })
+			}).then(r => {
+				if (!r.ok) r.text().then(alert);
+				else location.reload();
+			});
+		}
+	</script>
+	<select id="branch" onchange="switchBranch(this.value)">
 	{% for branch in branches %}
 		<option>{{ branch }}</option>
 	{% endfor %}
@@ -18,23 +32,79 @@
 	<div id="rc-pane" class="pane">
 		<small>Unstaged Changes</small>
 		<br>
+		<script>
+			function toggleStage(box) {
+				const file = box.dataset.file;
+				const url = box.checked ? '/cmd/stage' : '/cmd/unstage';
+
+				fetch(url, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ file })
+				})
+				.then(r => {
+					if (!r.ok) {
+						box.checked = !box.checked;
+						r.text().then(alert);
+					}
+				});
+			}
+		</script>
 		<ul>
-			{% for change in unstaged %}
-			<label><input type="checkbox" value="{{ change }}">{{ change }}</label><br>
-			{% endfor %}
+		{% for change in unstaged %}
+			{% set file = change[3:] %}
+			<label>
+				<input
+					type="checkbox"
+					class="stage-box"
+					data-file="{{ file }}"
+					onchange="toggleStage(this)"
+				>
+				{{ change }}
+			</label><br>
+		{% endfor %}
 		</ul>
 	</div>
 	<div id="commit-pane" class="pane">
 		<small>Commit Options</small>
 		<br>
-		<textarea placeholder="Commit message"></textarea>
-		<button title="Register your saved changes in your local repo">✓ Commit changes</button>
+		<textarea id="commit-msg" placeholder="Commit message"></textarea>
+		<script>
+			function commit() {
+				const msg = document.getElementById('commit-msg').value.trim();
+				if (!msg) return alert("Commit message required.");
+
+				fetch('/cmd/commit', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ message: msg })
+				}).then(r => {
+					if (!r.ok) r.text().then(alert);
+					else location.reload();
+				});
+			}
+		</script>
+		<button onclick="commit();" title="Register your saved changes in your local repo">✓ Commit changes</button>
 	</div>
 	<div id="rem-pane" class="pane">
 		<small>Remote</small>
 		<br>
-		<button title="Upload your changes (e.g. to a GitHub repo)">🠕 Push to origin</button>
-		<button title="Download the latest changes to the code">🠗 Pull from origin</button>
+		<script>
+			function gitPush() {
+				runGit('/cmd/push');
+			}
+
+			function gitPull() {
+				runGit('/cmd/pull');
+			}
+
+			function runGit(url) {
+				fetch(url, { method: 'POST' })
+				.then(r => r.ok ? location.reload() : r.text().then(alert));
+			}
+		</script>
+		<button onclick="gitPush()" title="Upload your changes (e.g. to a GitHub repo)">🠕 Push to origin</button>
+		<button onclick="gitPull()" title="Download the latest changes to the code">🠗 Pull from origin</button>
 	</div>
 	<button title="(Advanced) use the system terminal to perform actions on your local repo" onclick="openshell();">$ Open shell</button>
 

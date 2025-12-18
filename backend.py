@@ -3,17 +3,133 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, abort, Response, redirect, make_response, url_for
 import json
 import os
+import sys
 import subprocess
 import asyncio
 import platform
+import threading
+import time
+import hashlib
+from pathlib import Path
+import base64
+import shutil
 
 app = Flask(__name__, template_folder="gui", static_folder=None)
 
 gui_dir = os.path.join(os.getcwd(), "gui")
 global cur_proj_dir
 cur_proj_dir = "none"
+global action_queue
+action_queue = []
 watch_dir = os.path.expanduser("~/BlockVine")
 state_file = "/tmp/known_sb3.json"
+
+
+def rebuild_reload():
+    print(f"Reloading!")
+    try:
+        subprocess.run([sys.executable, "sb3rebuild.py",
+                       cur_proj_dir], check=True)
+        print(f"Reload OK")
+    except Exception as e:
+        print(f"Failed to reload: {e}")
+        return False
+    action_queue.append("reload")
+    return True
+
+
+def break_sync():
+    print(f"Syncing with editor!")
+    try:
+        if "BlockVine" in cur_proj_dir:
+            cpd = Path(cur_proj_dir)
+            shutil.rmtree(cpd / "src", ignore_errors=True)
+            shutil.rmtree(cpd / "assets", ignore_errors=True)
+            shutil.rmtree(cpd / "_bvcache", ignore_errors=True)
+            subprocess.run([sys.executable, "sb3break.py",
+                           f"{cur_proj_dir}.sb3"], check=True)
+        else:
+            raise Exception("Current project directory is not a BlockVine directory.")
+        print(f"Sync OK")
+    except Exception as e:
+        print(f"Failed to sync: {e}")
+        return False
+    return True
+
+
+IGNORED_DIRS = {"__pycache__", "_bvcache", ".git"}
+IGNORED_SUFFIXES = {".pyc", ".tmp"}
+
+
+def snapshot_dir(root):
+    h = hashlib.sha256()
+
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS]
+
+        for name in sorted(files):
+            if name.endswith(tuple(IGNORED_SUFFIXES)):
+                continue
+
+            path = os.path.join(base, name)
+            try:
+                stat = os.stat(path)
+                h.update(path.encode())
+                h.update(str(stat.st_mtime).encode())
+                h.update(str(stat.st_size).encode())
+            except FileNotFoundError:
+                pass
+
+    return h.hexdigest()
+
+
+def snapshot_file(path):
+    try:
+        stat = os.stat(path)
+    except FileNotFoundError:
+        return None
+
+    h = hashlib.sha256()
+    h.update(path.encode())
+    h.update(str(stat.st_mtime).encode())
+    h.update(str(stat.st_size).encode())
+    return h.hexdigest()
+
+
+def watch_project_dir():
+    global cur_proj_dir, action_queue
+
+    last_dir_hash = None
+    last_sb3_hash = None
+
+    while True:
+        time.sleep(1)
+
+        if not cur_proj_dir or cur_proj_dir == "none":
+            continue
+        if not os.path.isdir(cur_proj_dir):
+            continue
+
+        sb3_path = f"{cur_proj_dir}.sb3"
+
+        try:
+            dir_hash = snapshot_dir(cur_proj_dir)
+            sb3_hash = snapshot_file(sb3_path)
+
+            if last_dir_hash and dir_hash != last_dir_hash:
+                rebuild_reload()
+                sb3_hash = snapshot_file(sb3_path)
+
+            if last_sb3_hash and sb3_hash != last_sb3_hash:
+                break_sync()
+                dir_hash = snapshot_dir(cur_proj_dir)
+
+            last_dir_hash = dir_hash
+            last_sb3_hash = sb3_hash
+
+        except Exception as e:
+            print(f"[Watcher] Error: {e}")
+
 
 def get_known_files():
     if os.path.exists(state_file):
@@ -24,9 +140,11 @@ def get_known_files():
                 return set()
     return set()
 
+
 def save_known_files(files):
     with open(state_file, "w") as f:
         json.dump(list(files), f)
+
 
 def get_new_sb3_files():
     current_files = {f for f in os.listdir(watch_dir) if f.endswith(".sb3")}
@@ -35,6 +153,7 @@ def get_new_sb3_files():
     if new:
         save_known_files(current_files)
     return list(new)
+
 
 if os.path.exists(state_file):
     try:
@@ -46,13 +165,15 @@ get_new_sb3_files()
 exsb3 = get_known_files()
 print(f"Existing SB3s found: {exsb3}")
 
+
 def get_git(proj_dir):
     try:
         subprocess.run(["git", "-C", proj_dir, "rev-parse", "--is-inside-work-tree"],
                        check=True, capture_output=True)
 
         branches = subprocess.run(
-            ["git", "-C", proj_dir, "branch", "-a", "--format", "%(refname:short)"],
+            ["git", "-C", proj_dir, "branch", "-a",
+                "--format", "%(refname:short)"],
             capture_output=True, text=True, check=True
         ).stdout.strip().split("\n")
 
@@ -69,7 +190,8 @@ def get_git(proj_dir):
     except subprocess.CalledProcessError:
         return [], []
 
-def open_terminal(path=None):
+
+def open_terminal(path=None, command=None):
     if path is None:
         path = os.getcwd()
     else:
@@ -84,15 +206,26 @@ def open_terminal(path=None):
                 f'tell application "Terminal" to do script "cd {path}"'
             ])
         elif system == "Linux":
-            for term in ["gnome-terminal", "konsole", "xfce4-terminal", "xterm"]:
+            for term in ["gnome-terminal", "konsole",
+                         "xfce4-terminal", "xterm"]:
                 if subprocess.call(f"which {term}", shell=True,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
-                    subprocess.Popen([term, "--workdir", path])
-                    break
+                    if term == "konsole":
+                        subprocess.Popen(
+                            [term, "--workdir", path] + (["-e", command] if command else []))
+                    elif term == "gnome-terminal":
+                        subprocess.Popen([term,
+                                          f"--working-directory={path}"] + (["--",
+                                                                             "bash",
+                                                                             "-c",
+                                                                             command] if command else []))
+                    else:
+                        subprocess.Popen([term, path, command])
+                return "ok"
             else:
-                return("No supported terminal emulator found.")
+                return ("No supported terminal emulator found.")
         else:
-            return(f"Unsupported operating system: {system}")
+            return (f"Unsupported operating system: {system}")
     except Exception as e:
         print(f"Could not open terminal: {e}")
 
@@ -100,6 +233,7 @@ def open_terminal(path=None):
 @app.route('/', methods=['GET'])
 def ping():
     return "Pong!", 200
+
 
 @app.route("/gui", defaults={"path": "index.html"})
 @app.route("/gui/<path:path>")
@@ -119,33 +253,68 @@ def serve_file(path):
             template_name = "onboarding.html"
         return render_template(
             template_name,
-            projectDir = cur_proj_dir,
-            projectName = cur_proj_dir.rsplit("/", 1)[-1],
-            sys_username = subprocess.run("whoami", capture_output=True, text=True).stdout,
+            projectDir=cur_proj_dir,
+            projectName=cur_proj_dir.rsplit("/", 1)[-1],
+            sys_username=subprocess.run(
+                "whoami", capture_output=True, text=True).stdout,
             branches=branches or ["⚠️ No branches found."],
             unstaged=unstaged
         )
     else:
         return abort(404)
 
+
+@app.route("/cmd/getInfo")
+def getInfo():
+    global cur_proj_dir, action_queue
+    branches, unstaged = get_git(cur_proj_dir)
+    aq = action_queue.copy()
+    action_queue.pop() if action_queue else None
+
+    sb3_path = f"{cur_proj_dir}.sb3"
+    projdata = None
+
+    if os.path.exists(sb3_path):
+        with open(sb3_path, "rb") as f:
+            projdata = base64.b64encode(f.read()).decode("utf-8")
+
+    return jsonify(
+        path=cur_proj_dir,
+        branches=branches,
+        unstaged=unstaged,
+        action_queue=aq,
+        projdata=projdata
+    ), 200
+
+
 @app.route("/modal/folderpicker")
 def md_folderpicker():
     home = os.path.expanduser("~")
     base_dir = os.path.join(home, "BlockVine")
-    folders = [f for f in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, f))]
-    projects = [{"name": f, "path": os.path.join(base_dir, f)} for f in folders]
+    folders = [
+        f for f in os.listdir(base_dir) if os.path.isdir(
+            os.path.join(
+                base_dir,
+                f))]
+    projects = [{"name": f, "path": os.path.join(
+        base_dir, f)} for f in folders]
     return render_template("modals/folderpicker.html", projects=projects)
+
 
 @app.route("/modal/convproject")
 def md_convproject():
-    return render_template("modals/convproject.html", sys_username=subprocess.run("whoami", capture_output=True, text=True).stdout)
+    return render_template("modals/convproject.html", sys_username=subprocess.run(
+        "whoami", capture_output=True, text=True).stdout)
 
 
 @app.route("/cmd/openProject", methods=['POST', 'GET'])
 def openproject():
     global cur_proj_dir
+    global action_queue
     cur_proj_dir = request.values.get('path')
+    action_queue.append("reload")
     return redirect("/gui")
+
 
 @app.route("/cmd/checkConv", methods=["POST", "GET"])
 def checkconv():
@@ -157,6 +326,7 @@ def checkconv():
         file_args = ",".join(new_files)
         conv_url = url_for("conview", files=file_args)
         return jsonify({"redirect": conv_url})
+
 
 @app.route("/cmd/runConv/<files>")
 def conview(files):
@@ -195,15 +365,106 @@ def conview(files):
 
     return Response(generate(), mimetype='text/html')
 
+
+@app.route("/cmd/stage", methods=["POST"])
+def stage():
+    global cur_proj_dir
+    file = request.get_json().get("file")
+
+    try:
+        subprocess.run(
+            ["git", "-C", cur_proj_dir, "add", file],
+            check=True
+        )
+        return "", 204
+    except subprocess.CalledProcessError as e:
+        return str(e), 500
+
+
+@app.route("/cmd/unstage", methods=["POST"])
+def unstage():
+    global cur_proj_dir
+    file = request.get_json().get("file")
+
+    try:
+        subprocess.run(
+            ["git", "-C", cur_proj_dir, "restore", "--staged", file],
+            check=True
+        )
+        return "", 204
+    except subprocess.CalledProcessError as e:
+        return str(e), 500
+
+
+@app.route("/cmd/commit", methods=["POST"])
+def commit():
+    global cur_proj_dir
+    global action_queue
+    msg = request.get_json().get("message")
+
+    try:
+        subprocess.run(
+            ["git", "-C", cur_proj_dir, "commit", "-m", msg],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # action_queue.append("reload")
+        return "", 204
+    except subprocess.CalledProcessError as e:
+        return e.stderr or str(e), 500
+
+
+@app.route("/cmd/push", methods=["POST"])
+def push():
+    global cur_proj_dir
+    try:
+        open_terminal(
+            path=cur_proj_dir,
+            command=f"git -C {cur_proj_dir} push origin")
+        return "", 204
+    except Exception as e:
+        return str(e), 500
+
+
+@app.route("/cmd/pull", methods=["POST"])
+def pull():
+    global cur_proj_dir
+    try:
+        open_terminal(
+            path=cur_proj_dir,
+            command=f"git -C {cur_proj_dir} pull origin"),
+        return "", 204
+    except Exception as e:
+        return str(e), 500
+
+
+@app.route("/cmd/checkout", methods=["POST"])
+def checkout():
+    global cur_proj_dir
+    branch = request.get_json().get("branch")
+
+    try:
+        subprocess.run(
+            ["git", "-C", cur_proj_dir, "checkout", branch],
+            check=True
+        )
+        return "", 204
+    except subprocess.CalledProcessError as e:
+        return str(e), 500
+
+
 @app.route("/cmd/openShell", methods=['POST', 'GET'])
 def openshell():
     global cur_proj_dir
     print(cur_proj_dir)
     result = open_terminal(path=cur_proj_dir)
-    if result:
+    if not result == "ok":
         return result, 500
     else:
         return "Shell OK", 200
 
+
 if __name__ == '__main__':
+    threading.Thread(target=watch_project_dir, daemon=True).start()
     app.run(host='127.0.0.1', port=8617, debug=True)
