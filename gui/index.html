@@ -19,7 +19,7 @@
 				body: JSON.stringify({ branch })
 			}).then(r => {
 				if (!r.ok) r.text().then(alert);
-				else location.reload();
+				location.reload();
 			});
 		}
 	</script>
@@ -52,7 +52,7 @@
 		</script>
 		<ul>
 		{% for change in unstaged %}
-			{% set file = change[3:] %}
+			{% set file = change.split(maxsplit=1)[1] %}
 			<label>
 				<input
 					type="checkbox"
@@ -80,12 +80,26 @@
 					body: JSON.stringify({ message: msg })
 				}).then(r => {
 					if (!r.ok) r.text().then(alert);
-					else location.reload();
+					location.reload();
 				});
 			}
 		</script>
 		<button onclick="commit();" title="Register your saved changes in your local repo">✓ Commit changes</button>
 	</div>
+    <div id="history-pane" class="pane">
+	    <small>Commit History</small>
+	    <br>
+	    <ul class="commit-list">
+	    {% for c in history %}
+		    <li>
+			    <b>{{ c.hash }}</b>
+			    | {{ c.message }}<br>
+			    <small>{{ c.author }} · {{ c.date }}</small>
+		    </li>
+            <hr style="color: #222;">
+	    {% endfor %}
+	    </ul>
+    </div>
 	<div id="rem-pane" class="pane">
 		<small>Remote</small>
 		<br>

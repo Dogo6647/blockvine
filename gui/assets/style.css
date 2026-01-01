@@ -133,6 +133,10 @@ h1 a {
     max-height: 256px;
 }
 
+#history-pane {
+    max-height: 128px;
+}
+
 #commit-pane textarea {
     width: 100%;
     height: 128px;

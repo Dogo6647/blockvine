@@ -22,6 +22,7 @@ cur_proj_dir = "none"
 global action_queue
 action_queue = []
 watch_dir = os.path.expanduser("~/BlockVine")
+os.makedirs(watch_dir, exist_ok=True)
 state_file = "/tmp/known_sb3.json"
 
 
@@ -191,6 +192,38 @@ def get_git(proj_dir):
         return [], []
 
 
+def get_git_history(proj_dir, limit=32):
+    try:
+        out = subprocess.run(
+            [
+                "git", "-C", proj_dir, "log",
+                f"--max-count={limit}",
+                "--pretty=format:%h|%an|%ad|%s",
+                "--date=short"
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        ).stdout.strip()
+
+        commits = []
+        for line in out.split("\n"):
+            if not line:
+                continue
+            h, author, date, msg = line.split("|", 3)
+            commits.append({
+                "hash": h,
+                "author": author,
+                "date": date,
+                "message": msg
+            })
+
+        return commits
+
+    except subprocess.CalledProcessError:
+        return []
+
+
 def open_terminal(path=None, command=None):
     if path is None:
         path = os.getcwd()
@@ -213,15 +246,17 @@ def open_terminal(path=None, command=None):
                     if term == "konsole":
                         subprocess.Popen(
                             [term, "--workdir", path] + (["-e", command] if command else []))
+                        return "ok"
                     elif term == "gnome-terminal":
                         subprocess.Popen([term,
                                           f"--working-directory={path}"] + (["--",
                                                                              "bash",
                                                                              "-c",
                                                                              command] if command else []))
+                        return "ok"
                     else:
                         subprocess.Popen([term, path, command])
-                return "ok"
+                        return "ok"
             else:
                 return ("No supported terminal emulator found.")
         else:
@@ -241,6 +276,7 @@ def serve_file(path):
     global cur_proj_dir
     full_path = os.path.join(gui_dir, path)
     branches, unstaged = get_git(cur_proj_dir)
+    history = get_git_history(cur_proj_dir)
     if not path.endswith(".html"):
         if os.path.isfile(full_path):
             return send_from_directory(gui_dir, path)
@@ -258,7 +294,8 @@ def serve_file(path):
             sys_username=subprocess.run(
                 "whoami", capture_output=True, text=True).stdout,
             branches=branches or ["⚠️ No branches found."],
-            unstaged=unstaged
+            unstaged=unstaged,
+            history=history
         )
     else:
         return abort(404)
@@ -268,6 +305,7 @@ def serve_file(path):
 def getInfo():
     global cur_proj_dir, action_queue
     branches, unstaged = get_git(cur_proj_dir)
+    history = get_git_history(cur_proj_dir)
     aq = action_queue.copy()
     action_queue.pop() if action_queue else None
 
@@ -283,7 +321,8 @@ def getInfo():
         branches=branches,
         unstaged=unstaged,
         action_queue=aq,
-        projdata=projdata
+        projdata=projdata,
+        history=history
     ), 200
 
 
@@ -346,7 +385,7 @@ def conview(files):
             print(f"\nRunning sb3break.py on {f}...\n")
             try:
                 process = subprocess.Popen(
-                    ["python3", "sb3break.py", path, "--git"],
+                    [sys.executable, "sb3break.py", path, "--git"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -374,11 +413,15 @@ def stage():
     try:
         subprocess.run(
             ["git", "-C", cur_proj_dir, "add", file],
-            check=True
+            check=True,
+            capture_output=True,
+            text=True
         )
         return "", 204
+
     except subprocess.CalledProcessError as e:
-        return str(e), 500
+        msg = e.stderr or e.stdout or "Unknown git error"
+        return msg, 500
 
 
 @app.route("/cmd/unstage", methods=["POST"])
@@ -442,16 +485,22 @@ def pull():
 @app.route("/cmd/checkout", methods=["POST"])
 def checkout():
     global cur_proj_dir
+    global action_queue
     branch = request.get_json().get("branch")
 
     try:
         subprocess.run(
             ["git", "-C", cur_proj_dir, "checkout", branch],
-            check=True
+            check=True,
+            capture_output=True,
+            text=True
         )
+        action_queue.append("reload")
         return "", 204
+
     except subprocess.CalledProcessError as e:
-        return str(e), 500
+        msg = e.stderr or e.stdout or "Unknown git error"
+        return msg, 500
 
 
 @app.route("/cmd/openShell", methods=['POST', 'GET'])
