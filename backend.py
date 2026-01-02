@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from flask import Flask, render_template, request, jsonify, send_from_directory, abort, Response, redirect, make_response, url_for
+from flask_cors import CORS
 import json
 import os
 import sys
@@ -23,7 +24,7 @@ global action_queue
 action_queue = []
 watch_dir = os.path.expanduser("~/BlockVine")
 os.makedirs(watch_dir, exist_ok=True)
-state_file = "/tmp/known_sb3.json"
+state_file = os.path.join(tempfile.gettempdir(), "known_sb3.json")
 
 
 def rebuild_reload():
@@ -232,12 +233,14 @@ def open_terminal(path=None, command=None):
     system = platform.system()
     try:
         if system == "Windows":
-            subprocess.Popen(f'start cmd /K "cd /d {path}"', shell=True)
+            subprocess.Popen(f'start cmd /K "cd /d {path} && {command}"', shell=True)
+            return "ok"
         elif system == "Darwin":
             subprocess.Popen([
                 "osascript", "-e",
-                f'tell application "Terminal" to do script "cd {path}"'
+                f'tell application "Terminal" to do script "cd {path} && {command}"'
             ])
+            return "ok"
         elif system == "Linux":
             for term in ["gnome-terminal", "konsole",
                          "xfce4-terminal", "xterm"]:
@@ -290,7 +293,7 @@ def serve_file(path):
         return render_template(
             template_name,
             projectDir=cur_proj_dir,
-            projectName=cur_proj_dir.rsplit("/", 1)[-1],
+            projectName=os.path.basename(cur_proj_dir),
             sys_username=subprocess.run(
                 "whoami", capture_output=True, text=True).stdout,
             branches=branches or ["⚠️ No branches found."],

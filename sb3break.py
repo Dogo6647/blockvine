@@ -8,16 +8,23 @@ import json
 import time
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")
+
+USE_EMOJI = os.name != "nt"  # windows can't print emojis to terminal or else it explodes
+
+def icon(emoji, fallback):
+    return emoji if USE_EMOJI else fallback
+
 try:
     from jsonbreak import disassemble_json
 except ImportError:
-    print("[ ⚠️ ] sb3break depends on jsonbreak.py. Make sure it’s in the same directory.")
+    print(f"[ {icon('⚠️', 'WARN')} ] sb3break depends on jsonbreak.py. Make sure it’s in the same directory.")
     sys.exit(1)
 
 def organize_sb3(sb3_path):
     sb3_path = Path(sb3_path).expanduser().resolve()
     if not sb3_path.exists() or sb3_path.suffix != ".sb3":
-        print(f"[ ❌ ] {sb3_path} is an unsupported or nonexistent file.")
+        print(f"[ {icon('❌', 'ERROR')} ] {sb3_path} is an unsupported or nonexistent file.")
         return
 
     home = Path.home()
@@ -27,7 +34,7 @@ def organize_sb3(sb3_path):
         out_dir = home / "BlockVine" / sb3_path.stem
     assets_dir = out_dir / "assets"
 
-    print(f"[ 🗜️ ] Extracting {sb3_path.name} to {out_dir}...")
+    print(f"[ {icon('🗜️', 'ZIP')} ] Extracting {sb3_path.name} to {out_dir}...")
     out_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(sb3_path, 'r') as zip_ref:
         zip_ref.extractall(out_dir)
@@ -42,7 +49,7 @@ def organize_sb3(sb3_path):
     for d in subdirs.values():
         d.mkdir(parents=True, exist_ok=True)
 
-    print("[ 📂 ] Sorting assets...")
+    print(f"[ {icon('📂', 'FOLDER')} ] Sorting assets...")
     for file in out_dir.glob("*"):
         if not file.is_file():
             continue
@@ -73,14 +80,14 @@ def organize_sb3(sb3_path):
                 else:
                     shutil.move(str(file), subdirs["bgm"] / file.name)
             except Exception as e:
-                print(f"[ ⚠️ ] Unknown duration for file {file.name}: {e}")
+                print(f"[ {icon('⚠️', 'WARN')} ] Unknown duration for file {file.name}: {e}")
                 shutil.move(str(file), subdirs["audio"] / file.name)
 
         elif ext in [".ttf", ".otf", ".woff", ".woff2"]:
             shutil.move(str(file), subdirs["font"] / file.name)
 
     project_json = out_dir / "project.json"
-    print("[ 🧩 ] Breaking up project JSON...")
+    print(f"[ {icon('🧩', 'FOLDER')} ] Breaking up project JSON...")
     try:
         with open(project_json, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -90,9 +97,9 @@ def organize_sb3(sb3_path):
 
     if project_json.exists():
         project_json.unlink()
-        print("[ 🧹 ] Cleanup: deleted original project.json")
+        print(f"[ {icon('🧹', 'POST')} ] Cleanup: deleted original project.json")
 
-    print(f"[ 😁 ] All done! Your project folder was generated at {out_dir}")
+    print(f"[ {icon('😁', 'OK')} ] All done! Your project folder was generated at {out_dir}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -112,7 +119,7 @@ if __name__ == "__main__":
     if use_git and not (out_dir / ".git").exists():
         import subprocess
         try:
-            print("[ +🌱 ] Init Git...")
+            print(f"[ {icon('+🌱', 'GIT')} ] Init Git...")
             subprocess.run(["git", "init", "-b", "main"], cwd=out_dir, check=True, stdout=subprocess.PIPE)
             gitignore_content = """# Python
 __pycache__/
@@ -137,6 +144,6 @@ _bvcache/
             subprocess.run(["git", "add", "."], cwd=out_dir, check=True)
             subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=out_dir, check=True)
 
-            print("[ +😁 ] Git repo initialized. Default branch is {main}.")
+            print(f"[ {icon('+😁', 'GIT.OK')} ] Git repo initialized. Default branch is main.")
         except subprocess.CalledProcessError as e:
-            print(f"[ +⚠️ ] Git init failed: {e}")
+            print(f"[ {icon('+⚠️', 'GIT.WARN')} ] Git init failed: {e}")
