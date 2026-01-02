@@ -14,8 +14,73 @@ import hashlib
 from pathlib import Path
 import base64
 import shutil
+import tempfile
+import tkinter as tk
+from tkinter import messagebox
+import pystray
+from PIL import Image
+import logging
+from logging.handlers import RotatingFileHandler
+
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+
+LOG_FILE = os.path.join(tempfile.gettempdir(), "blockvine.log")
+logger = logging.getLogger("blockvine")
+logger.setLevel(logging.INFO)
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
+handler = RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=2_000_000,
+    backupCount=3,
+    encoding="utf-8"
+)
+
+formatter = logging.Formatter(
+    "[%(asctime)s] %(levelname)s: %(message)s",
+    "%Y-%m-%d %H:%M:%S"
+)
+
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+class StdoutLogger:
+    def write(self, message):
+        if message.strip():
+            logger.info(message.strip())
+
+    def flush(self):
+        pass
+
+sys.stdout = StdoutLogger()
+sys.stderr = StdoutLogger()
+
 
 app = Flask(__name__, template_folder="gui", static_folder=None)
+CORS(app)
+def tray():
+    def open_logs():
+        if sys.platform.startswith("win"):
+            os.startfile(LOG_FILE)
+        elif sys.platform.startswith("darwin"):
+            subprocess.run(["open", LOG_FILE])
+        else:
+            subprocess.run(["xdg-open", LOG_FILE])
+
+    icon = pystray.Icon(
+        "blockvine",
+        Image.open("gui/assets/icon.png"),
+        "BlockVine is running",
+        menu=pystray.Menu(
+            pystray.MenuItem("Show Logs", open_logs),
+            pystray.MenuItem("Reload Now", lambda: action_queue.append("reload")),
+            pystray.MenuItem("Quit", lambda: os._exit(0))
+        )
+    )
+    icon.run()
+
 
 gui_dir = os.path.join(os.getcwd(), "gui")
 global cur_proj_dir
@@ -268,6 +333,7 @@ def open_terminal(path=None, command=None):
         print(f"Could not open terminal: {e}")
 
 
+### API ENDPOINTS ###
 @app.route('/', methods=['GET'])
 def ping():
     return "Pong!", 200
@@ -479,7 +545,7 @@ def pull():
     try:
         open_terminal(
             path=cur_proj_dir,
-            command=f"git -C {cur_proj_dir} pull origin"),
+            command=f"git -C {cur_proj_dir} pull origin --rebase"),
         return "", 204
     except Exception as e:
         return str(e), 500
@@ -519,4 +585,5 @@ def openshell():
 
 if __name__ == '__main__':
     threading.Thread(target=watch_project_dir, daemon=True).start()
-    app.run(host='127.0.0.1', port=8617, debug=True)
+    threading.Thread(target=tray, daemon=True).start()
+    app.run(host='127.0.0.1', port=8617, debug=False)
