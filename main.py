@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
-
-from flask import Flask, render_template, request, jsonify, send_from_directory, abort, Response, redirect, make_response, url_for
-from flask_cors import CORS
+import psutil  # supports linux, windows, macos, freebsd, openbsd, netbsd, sun solaris, and aix. sorry if you dont use those!
+import base64
+import hashlib
 import json
+import logging
 import os
-import sys
-import subprocess
-import asyncio
 import platform
+import shutil
+import subprocess
+import sys
+import tempfile
 import threading
 import time
-import hashlib
-from pathlib import Path
-import base64
-import shutil
-import tempfile
-import tkinter as tk
-from tkinter import messagebox
-import pystray
-from PIL import Image
-import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
+
+import pystray
+from flask import (Flask, Response, abort, jsonify, make_response, redirect,
+                   render_template, request, send_from_directory, url_for)
+from flask_cors import CORS
+from PIL import Image
+
+import settings
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -54,12 +55,25 @@ class StdoutLogger:
     def flush(self):
         pass
 
-sys.stdout = StdoutLogger()
-sys.stderr = StdoutLogger()
+#sys.stdout = StdoutLogger()
+#sys.stderr = StdoutLogger()
 
 
 app = Flask(__name__, template_folder="gui", static_folder=None)
 CORS(app)
+
+settings_data = settings.settings()
+
+def launch_turbowarp():
+    if settings_data["launch-turbowarp-on-open"] == True:
+        normal_path = os.path.normpath(settings_data["turbowarp-path"])
+        if not os.path.basename(normal_path) in (i.name() for i in psutil.process_iter()):
+            if os.path.exists(normal_path):
+                print("Launching TurboWarp")
+                subprocess.Popen(normal_path)
+            else:
+                print("Turbowarp path does not exist.")
+
 def tray():
     def open_logs():
         if sys.platform.startswith("win"):
@@ -76,6 +90,7 @@ def tray():
         menu=pystray.Menu(
             pystray.MenuItem("Show Logs", open_logs),
             pystray.MenuItem("Reload Now", lambda: action_queue.append("reload")),
+            pystray.MenuItem("Relaunch TurboWarp", launch_turbowarp),
             pystray.MenuItem("Quit", lambda: os._exit(0))
         )
     )
@@ -582,8 +597,9 @@ def openshell():
     else:
         return "Shell OK", 200
 
-
 if __name__ == '__main__':
+    launch_turbowarp()
+
     threading.Thread(target=watch_project_dir, daemon=True).start()
     threading.Thread(target=tray, daemon=True).start()
     app.run(host='127.0.0.1', port=8617, debug=False)

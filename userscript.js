@@ -145,6 +145,19 @@
                     });
                     closeBtn.onclick = () => sidebar.remove();
 
+                    const reloadBtn = document.createElement('button'); // home button
+                    reloadBtn.textContent = '⌂';
+                    Object.assign(reloadBtn.style, {
+                        background: '#222',
+                        border: 'none',
+                        borderRadius: '1em',
+                        color: '#fff',
+                        fontSize: '16px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        marginRight: '8px'
+                    });
+
                     const dockBtn = document.createElement('button');
                     dockBtn.textContent = '⇄';
                     Object.assign(dockBtn.style, {
@@ -174,10 +187,16 @@
                         dockedLeft = !dockedLeft;
                     };
 
+                    reloadBtn.onclick = () => {
+                        iframe.contentWindow.location.href = "http://localhost:8617/gui"
+                    }
+
                     const buttonContainer = document.createElement('div');
                     buttonContainer.style.display = 'flex';
+                    buttonContainer.appendChild(reloadBtn);
                     buttonContainer.appendChild(dockBtn);
                     buttonContainer.appendChild(closeBtn);
+                    
 
                     titleBar.appendChild(buttonContainer);
                     sidebar.appendChild(titleBar);

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
+import json
 import os
-import sys
 import shutil
+import sys
 import zipfile
 from pathlib import Path
-import json
 
 sys.stdout.reconfigure(encoding="utf-8")
 

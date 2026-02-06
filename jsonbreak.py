@@ -1,5 +1,7 @@
-import json, os
+import json
+import os
 from urllib.parse import quote
+
 
 def disassemble_json(data, path, *, split_arrays=True):
     """

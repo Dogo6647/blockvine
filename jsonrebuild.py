@@ -1,5 +1,7 @@
-import json, os
+import json
+import os
 from urllib.parse import unquote
+
 
 def rebuild_json(path):
     """
