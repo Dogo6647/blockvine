@@ -44,7 +44,8 @@ def organize_sb3(sb3_path):
         "vector": assets_dir / "vector",
         "audio": assets_dir / "audio",
         "bgm": assets_dir / "bgm",
-        "font": assets_dir / "font"
+        "font": assets_dir / "font",
+        "binary": assets_dir / "binary"
     }
     for d in subdirs.values():
         d.mkdir(parents=True, exist_ok=True)
@@ -85,6 +86,8 @@ def organize_sb3(sb3_path):
 
         elif ext in [".ttf", ".otf", ".woff", ".woff2"]:
             shutil.move(str(file), subdirs["font"] / file.name)
+        elif ext not in [".json"]: # the project.json sneaks there
+            shutil.move(str(file), subdirs["binary"] / file.name)
 
     project_json = out_dir / "project.json"
     print(f"[ {icon('🧩', 'FOLDER')} ] Breaking up project JSON...")
