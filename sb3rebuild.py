@@ -41,7 +41,7 @@ def rebuild_sb3(project_dir):
         return
 
     print(f"[ {icon('📤', 'FOLDER')} ] Moving assets back into the main directory...")
-    for category in ["raster", "vector", "audio", "bgm", "font"]:
+    for category in ["raster", "vector", "audio", "bgm", "font", "binary"]:
         src_dir = assets_dir / category
         if not src_dir.exists():
             continue
